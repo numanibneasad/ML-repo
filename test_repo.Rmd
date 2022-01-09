@@ -9,19 +9,921 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+#library
 
-```{r cars}
-summary(cars)
+library(magrittr)
+library(car)
+library(broom)
+library(ggplot2)
+library(tidyverse)
+library(MASS)
+library(car)
 ```
 
-## Including Plots
+```{r}
 
-You can also embed plots, for example:
+#Multiple regression analysis N-related gene vs Quality
+reg.data.farm=read.table("regression data.txt", header=T, row.names = 1, sep="\t")
+treat.reg=read.table(file=paste("metafile.lm.txt", sep=""), header=T, sep="\t",  row.names=1)
+top.16s.otu.cca=read.table("top.16s.txt", header=T, row.names = 1,  sep="\t")
+top.ITS.otu.cca=read.table("top.ITS.txt", header=T, row.names = 1, sep="\t")
+top.16s.otu.cor=read.table("top.16s.cor.txt", header=T, row.names = 1,  sep="\t")
+top.ITS.otu.cor=read.table("top.ITS.cor.txt", header=T, row.names = 1, sep="\t")
+quality.33.field=read.table("qual.trunc.txt", header=T, row.names = 1,  sep="\t")
+
+```
+
+```{r}
+
+#Sanity Check
+reg.data.farm=reg.data.farm[order(row.names(reg.data.farm)),]
+treat.reg=treat.reg[order(row.names(treat.reg)),]
+quality.33.field=quality.33.field[order(row.names(quality.33.field)),]
+top.16s.otu.cor=top.16s.otu.cor[order(row.names(top.16s.otu.cor)),]
+top.ITS.otu.cor=top.ITS.otu.cor[order(row.names(top.ITS.otu.cor)),]
+top.16s.otu.cca=top.16s.otu.cca[order(row.names(top.16s.otu.cca)),]
+top.ITS.otu.cca=top.ITS.otu.cca[order(row.names(top.ITS.otu.cca)),]
+
+row.names(treat.reg)==row.names(reg.data.farm)
+row.names(quality.33.field)==row.names(reg.data.farm)
+row.names(top.16s.otu.cor)==row.names(reg.data.farm)
+row.names(top.ITS.otu.cor)==row.names(reg.data.farm)
+row.names(top.16s.otu.cca)==row.names(reg.data.farm)
+row.names(top.ITS.otu.cca)==row.names(reg.data.farm)
+
+```
+
+```{r}
+#Data Preparation for regression model
+
+reg.data.cor=cbind(treat.reg,reg.data.farm, quality.33.field,top.16s.otu.cor,top.ITS.otu.cor)
+reg.data.cor=na.omit(reg.data.cor)
+
+reg.data.cca=cbind(treat.reg,reg.data.farm, quality.33.field,top.16s.otu.cca,top.ITS.otu.cca)
+reg.data.cca=na.omit(reg.data.cca)
+
+#create dummy variables
+Helios <- ifelse(reg.data.cor$Variety == 'Helios', 1, 0)
+Touran <- ifelse(reg.data.cor$Variety == 'Touran', 1, 0)
+Scotia <- ifelse(reg.data.cor$Variety == 'Scotia', 1, 0)
+Walton <- ifelse(reg.data.cor$Variety == 'Walton', 1, 0)
+Warthog <-ifelse(reg.data.cor$Variety == 'Warthog', 1, 0)
+Harvard <-ifelse(reg.data.cor$Variety == 'Harvard', 1, 0)
+
+#create data frame to use for regression
+reg.data.cor<- data.frame(reg.data.cor,
+                          Helios=Helios,
+                          Touran=Touran,
+                          Scotia=Scotia,
+                          Walton=Walton,
+                          Warthog=Warthog,
+                          Harvard=Harvard)
+
+
+reg.data.cca<- data.frame(reg.data.cca,
+                          Helios=Helios,
+                          Touran=Touran,
+                          Scotia=Scotia,
+                          Walton=Walton,
+                          Warthog=Warthog,
+                          Harvard=Harvard)
+```
+
+```{r}
+#Weight vs n-related gene+bacterial diversity
+data.weight=reg.data.cor[!is.na(reg.data.cor$Yield),]
+data.weight=na.omit(data.weight)
+
+data.weight.1=reg.data.cca[!is.na(reg.data.cca$Yield),]
+data.weight.1=na.omit(data.weight.1)
+
+#Model with all variables
+model.null = lm(Yield ~ 1, data=data.weight)
+model.full = lm(Yield ~ Total.C+Total.N+C.N.ratio+watercontent+ph+F.B.ratio+AOA+AOB+nirk+nosZ+Y.Amino.Butyric.acid+D.Glucosaminic.Acid+Glucose.1..Phosphate+
+                  L.Arginine+L.Asparagine+L.Phenylalanine+N.Acetyl.D.Glucosamine+L.Threonine+A.Keto.Butyric.acid+Putrescine+bact.chao1+bact.simpson+bact.shannon+bact.sobs+fun.Chao1+fun.simpson+fun.shannon+fun.sobs+
+                  X14+X1397+X2029+X2190+X2413+X3294+X3955+X4604+X6319++X30972+X80+X136+X886+X340+X454+X757+X1199+X1412+X1395+X3671+axis1.bact+axis2.bact+axis1.fun+axis2.fun, data=data.weight)
+
+
+step(model.null, scope = list(upper=model.full), direction="both", k=3, data=data.weight)  
+
+Yield.microbes5 =lm(Yield ~ X757 +axis1.bact + 
+                      Y.Amino.Butyric.acid + AOB + fun.sobs , data = data.weight)
+
+model.microbes =lm(Yield ~ X757 + A.Keto.Butyric.acid + axis1.bact + 
+                     Y.Amino.Butyric.acid + AOB + AOA + X80 + X3294 + bact.sobs + 
+                     X1397 + fun.sobs + X886, data = data.weight)
+
+
+model.yield.combined =lm(Yield ~ ph + X757 + Walton + axis2.fun + C.N.ratio + 
+                           watercontent + axis1.fun + Warthog + L.Threonine + X340, 
+                         data = data.weight)
+
+
+yield.without.variety=lm(Yield ~ ph + X757 + watercontent + C.N.ratio + X2413 + 
+                           X3671 + L.Threonine + X2029 + axis2.fun + axis1.fun, data=data.weight)
+
+
+soil.micro=lm(Yield ~ Total.C+Total.N+C.N.ratio+watercontent+ph+X3671 + L.Threonine + X2029 + axis2.fun + axis1.fun, data=data.weight)
+
+
+soil.micro.interact=lm(Yield ~Total.C*X3671*Total.N*L.Threonine *C.N.ratio* X2029* ph*axis2.fun, data=data.weight)
+
+yield.var= lm(Yield~Helios+Warthog+Walton+Scotia+Harvard, data=data.weight)
+
+summary(model.yield.combined)
+summary(yield.without.variety)
+summary(yield.var)
+summary(soil.micro)
+summary(soil.micro.interact)
+summary(yield.microbes5)
+
+data.weight$YieldPred=predict(soil.micro.interact)
+#ggplot(data=data.weight,aes(y=YieldPred,x=Yield,color=Region))+geom_point()+stat_smooth(method="lm", color="darkred",se=FALSE)
+
+```
+
+```{r}
+library(tidyverse)
+library(caret)
+
+```
+
+```{r}
+#Model with CCA selected ASVs
+model.null = lm(Yield ~ 1, data=data.weight.1)
+model.full.cca = lm(Yield ~ Total.C+Total.N+C.N.ratio+watercontent+ph+F.B.ratio+AOA+AOB+nirk+nosZ+Y.Amino.Butyric.acid+D.Glucosaminic.Acid+Glucose.1..Phosphate+
+                      L.Arginine+L.Asparagine+L.Phenylalanine+N.Acetyl.D.Glucosamine+L.Threonine+A.Keto.Butyric.acid+Putrescine+bact.chao1+bact.simpson+bact.shannon+bact.sobs+fun.Chao1+fun.simpson+fun.shannon+fun.sobs+
+                      X33+X43+X47+X75+X98+X106+X162+X202+X258++X473+X83+X134+X126+X175+X197+X230+X697+X45+X131+X59+axis1.bact+axis2.bact+axis1.fun+axis2.fun+Helios+Touran+Scotia+Walton+Warthog+Harvard, data=data.weight.1)
+
+step(model.null, scope = list(upper=model.full.cca), direction="both",k=5, data=data.weight.1)  
+
+
+model.yield.NEW =lm(Yield ~ ph + X43 + L.Asparagine + Walton + axis2.fun, 
+                    data = data.weight.1)
+
+summary(model.yield.NEW)
+
+
+#Plotting with Predictors
+
+
+data.weight$YieldPred=predict(yield.without.variety)
+#Yield=plot(YieldPred ~ Yield, data=data.weight, pch = 16, xlab="Observed weight (kg/hL)", ylab="Predicted Weight (kg/hL)")+abline(0,1, col="blue", lwd=2)
+#ggplot
+
+library(ggplot2)
+
+Yield=ggplot(data=data.weight, aes(x=Yield, y=YieldPred, stroke=1.0, color=Region))+
+  geom_point() +
+  geom_smooth(method="lm", color="darkred",se=FALSE, fullrange=TRUE)+
+  theme_classic() + 
+  xlab("Observed Yield (T/ha)")+
+  ylab("Predicted Yield (T/ha)")+
+  ggtitle("E.")+
+  #scale_color_manual(values=c(16,17,18,19,20,21), name="Variety", breaks=c("Warthog", "Scotia","Touran","Harvard","Walton"))+
+  theme(panel.border = element_rect(colour = "black", fill=NA))
+
+# Use brewer color palettes
+Yield+scale_color_brewer(palette="Dark2")
+Yield + theme(plot.title = element_text(size=6,hjust = 0.01))
+
+ggsave(file="grain weight prediction.3.without.VAR.tiff", Yield, height = 3.5, width = 5.5, units = "in",dpi=600, compression="lzw")
+ggsave(file="grain weight prediction.3.ONLLY VAR.tiff", Yield, height = 3.5, width = 5.5, units = "in",dpi=700,compression="lzw")
+ggsave(file="grain weight prediction.microsoil.eps", Yield, height = 3.5, width = 5.5, units = "in",dpi=700)
+
+```
+
+```{r}
+
+library(ggplot2)
+
+#Protein 
+data.protein=reg.data.cor[!is.na(reg.data.cor$Protein),]
+data.protein= na.omit(data.protein)
+
+data.protein.1=reg.data.cca[!is.na(reg.data.cca$Protein),]
+data.protein.1= na.omit(data.protein.1)
+
+#Model with all variables
+model.null = lm(Protein ~ 1, data=data.protein)
+model.full = lm(Protein ~ Total.C+Total.N+C.N.ratio+watercontent+ph+F.B.ratio+AOA+AOB+nirk+nosZ+Y.Amino.Butyric.acid+D.Glucosaminic.Acid+Glucose.1..Phosphate+
+                  L.Arginine+L.Asparagine+L.Phenylalanine+N.Acetyl.D.Glucosamine+L.Threonine+A.Keto.Butyric.acid+Putrescine+bact.chao1+bact.simpson+bact.shannon+bact.sobs+fun.Chao1+fun.simpson+fun.shannon+fun.sobs+
+                  X14 +X1397+X2029+X2190+X2413+X3294+X3955+X4604+X6319++X30972+X80+X136+X886+X340+X454+X757+X1199+X1412+X1395+X3671+axis1.bact+axis2.bact+axis1.fun+axis2.fun, data=data.protein)
+
+step(model.null, scope = list(upper=model.full),direction="both",k=4,data=data.protein)  
+
+protein.microbes5=lm( Protein ~ axis2.fun + X3294  + Y.Amino.Butyric.acid + 
+                        AOB + fun.sobs  , data = data.protein)
+
+model.protein.microbes=lm(Protein ~ axis2.fun + X3294 + fun.shannon + Y.Amino.Butyric.acid + 
+                            Glucose.1..Phosphate + X340 + AOB + fun.sobs + X6319 + L.Arginine + 
+                            X80 , data = data.protein)
+
+model.protein.combined=lm(Protein ~ axis2.fun + Scotia + Helios + AOB + nosZ + 
+                            X3294 + Y.Amino.Butyric.acid + X80, data = data.protein)
+
+protein.without.variety=lm(Protein ~ axis2.fun + X3294 + ph + X80 + L.Threonine + 
+                             A.Keto.Butyric.acid + F.B.ratio + AOB + L.Asparagine+  
+                             X4604 , data=data.protein)
+
+soil.micro=lm(Protein ~ Total.C+Total.N+C.N.ratio+watercontent+ph+axis2.fun+X3294 +  X80 + L.Threonine + 
+                A.Keto.Butyric.acid , data=data.protein)
+
+Protein.variety=lm(Protein~Helios+Warthog+Walton+Scotia+Harvard, data = data.protein)
+
+summary(model.protein.combined)
+summary(protein.without.variety)
+summary(Protein.variety)
+summary(soil.micro)
+summary(protein.microbes5)
+#model.protein=lm(Protein ~ fun.shannon + X3294 + L.Serine + L.Arginine + AOB , data = data.protein)
+
+#model with cca selected  ASVs
+model.null = lm(Protein ~ 1, data=data.protein.1)
+model.full = lm(Protein ~ Total.C+Total.N+C.N.ratio+watercontent+ph+F.B.ratio+AOA+AOB+nirk+nosZ+D.Glucosaminic.Acid+Glucose.1..Phosphate+
+                  L.Arginine+L.Asparagine+L.Phenylalanine+N.Acetyl.D.Glucosamine+L.Threonine+A.Keto.Butyric.acid+Putrescine+bact.chao1+bact.simpson+bact.shannon+bact.sobs+fun.Chao1+fun.simpson+fun.shannon+fun.sobs+
+                  X33+X43+X47+X75+X98+X106+X162+X202+X258++X473+X83+X134+X126+X175+X197+X230+X697+X45+X131+X59+axis1.bact+axis2.bact+axis1.fun+axis2.fun+Helios+Touran+Scotia+Walton+Warthog+Harvard, data=data.protein.1)
+
+step(model.null, scope = list(upper=model.full), direction="both",k=4, data=data.protein.1) 
+
+# Double selection
+model.protein.full=lm(Protein~ axis2.fun + L.Phenylalanine + X197 + ph + 
+X59 + nosZ + AOB + A.Keto.Butyric.acid + Y.Amino.Butyric.acid + X45 + Total.N + Glucose.1..Phosphate + fun.simpson + X33 + fun.sobs + X134 + F.B.ratio + X697 + X106 + X75 + axis2.bact + L.Asparagine + X47 + fun.shannon + X98 + axis1.bact + Putrescine + Total.C, data =data.protein.1)
+
+step(model.null, scope = list(upper=model.protein.full), direction="both", data=data.protein) 
+
+model.protein.new=lm(Protein ~ axis2.fun + watercontent + L.Phenylalanine, data = data.protein)
+
+model.protein.variety=lm(Protein ~ axis2.fun + Scotia + Helios + AOB + nosZ + 
+                           X59 + X131, data = data.protein.1)
+
+summary(model.protein.new)
+summary(model.protein.variety)
+
+#Plotting with predictable variables
+
+data.protein$ProteinPred=predict(protein.without.variety)
+plot(ProteinPred ~ Protein, data=data.protein,pch = 16, xlab="Observed protein content (%)", ylab="Predicted protein content (%)")+abline(0,1, col="blue", lwd=2 )
+
+# Protein 
+protein=ggplot(data=data.protein, aes(x=Protein, y=ProteinPred, stroke=1.0, color=Region))+
+  geom_point() +
+  geom_smooth(method="lm", color="darkred",se=FALSE, fullrange=TRUE)+
+  theme_classic() + 
+  xlab("Observed protein content (%)")+
+  ylab("Predicted protein content (%)")+
+  ggtitle("A.")+
+  #scale_color_manual(values=c(16,17,18,19,20,21), name="Variety", breaks=c("Warthog", "Scotia","Helios","Harvard","Walton"))+
+  theme(panel.border = element_rect(colour = "black", fill=NA))
+
+# Use brewer color palettes
+protein+scale_color_brewer(palette="Dark2")
+protein + theme(plot.title = element_text(size=6,hjust = 0.01))
+
+```
+
+```{r}
+
+ggsave(file="grain protien prediction.3.without.VAR.tiff", protein, height = 3.5, width =5.5, units = "in",dpi=600, compression="lzw")
+ggsave(file="grain protein prediction.3.individual.var.tiff", protein, height = 3.5, width =5.5, units = "in",dpi=600)
+ggsave(file="grain protein prediction.microsoil.eps", protein, height = 3.5, width =5.5, units = "in",dpi=700)
+
+#Gluten 
+data.gluten=reg.data.cor[!is.na(reg.data.cor$Gluten),]
+data.gluten=na.omit(data.gluten)
+
+data.gluten.1=reg.data.cca[!is.na(reg.data.cca$Gluten),]
+data.gluten.1=na.omit(data.gluten.1)
+#Model with all variables
+model.null = lm(Gluten ~ 1, data=data.gluten)
+model.full = lm(Gluten ~Total.C+Total.N+C.N.ratio+watercontent+ph+F.B.ratio+AOA+AOB+nirk+nosZ+Y.Amino.Butyric.acid+D.Glucosaminic.Acid+Glucose.1..Phosphate+
+                  L.Arginine+L.Asparagine+N.Acetyl.D.Glucosamine+L.Threonine+A.Keto.Butyric.acid+Putrescine+bact.chao1+bact.simpson+bact.shannon+bact.sobs+fun.Chao1+fun.simpson+fun.shannon+fun.sobs+
+                  X14+X1397+X2029+X2190+X2413+X3294+X3955+X4604+X6319++X30972+X80+X136+X886+X340+X454+X757+X1199+X1412+X1395+X3671+axis1.bact+axis2.bact+axis1.fun+axis2.fun, data=data.gluten )
+
+step(model.null, scope = list(upper=model.full), direction="both",k=4,data=data.gluten)  
+
+
+
+model.gluten.microbes=lm(Gluten ~ axis2.fun + X454 + X3294 + fun.shannon + 
+                           Y.Amino.Butyric.acid, data = data.gluten)
+
+
+gulten.microbes5=lm(Gluten ~ axis2.fun + X454 + X3294 + fun.shannon + 
+                      Y.Amino.Butyric.acid, 
+                    data = data.gluten)
+# Combined model
+model.gluten.combined=lm(Gluten~ axis2.fun + X80 + X3294 + bact.chao1 + 
+                           Walton + Warthog + Harvard + AOB + Y.Amino.Butyric.acid + 
+                           fun.sobs , data = data.gluten)
+
+
+
+gluten.without.variety=lm(Gluten ~ axis2.fun + X3294 + ph + X80 + L.Threonine + 
+                            A.Keto.Butyric.acid + F.B.ratio + Total.N + AOB  
+                          
+                          , data=data.gluten)
+
+
+gluten.var=lm(Gluten~Helios+Warthog+Walton+Scotia+Harvard,data=data.gluten)
+
+micro.soil.glu=lm(Gluten ~Total.C+Total.N+C.N.ratio+watercontent+ph+axis2.fun + X3294 + ph + X80 + L.Threonine + 
+                    A.Keto.Butyric.acid , data=data.gluten)
+
+
+summary(gluten.microbes5)
+summary(model.gluten.combined)
+summary(gluten.without.variety)
+summary(gluten.var)
+summary(micro.soil.glu)
+#Double selection
+
+model.test.gluten=lm(Gluten ~ axis2.fun + X3294 + ph + X80 + L.Threonine + A.Keto.Butyric.acid + F.B.ratio + Total.N + AOB + L.Asparagine + X2029 + X454 +X886 + C.N.ratio + Y.Amino.Butyric.acid + X340 + X6319 + D.Glucosaminic.Acid + Glucose.1..Phosphate + X2413 + X757 + L.Arginine + X4604 + N.Acetyl.D.Glucosamine + Putrescine + axis1.fun + fun.sobs, data=data.gluten)
+
+step(model.null, scope = list(upper=model.test.gluten), direction="both",k=3,data=data.gluten)
+
+```
+
+```{r}
+
+#model based on CCA selection
+model.null = lm(Gluten ~ 1, data=data.gluten.1)
+model.full = lm(Gluten ~ Total.C+Total.N+C.N.ratio+watercontent+ph+F.B.ratio+AOA+AOB+nirk+nosZ+Y.Amino.Butyric.acid+D.Glucosaminic.Acid+Glucose.1..Phosphate+
+                  L.Arginine+L.Asparagine+L.Phenylalanine+N.Acetyl.D.Glucosamine+L.Threonine+A.Keto.Butyric.acid+Putrescine+bact.chao1+bact.simpson+bact.shannon+bact.sobs+fun.Chao1+fun.simpson+fun.shannon+fun.sobs+
+                  X33+X43+X47+X75+X98+X106+X162+X202+X258++X473+X83+X134+X126+X175+X197+X230+X697+X45+X131+X59+axis1.bact+axis2.bact+axis1.fun+axis2.fun+Walton+Warthog+Harvard, data=data.gluten.1)
+
+step(model.null, scope = list(upper=model.full),direction="both",k=4, data=data.gluten.1) 
+
+
+model.gluten.new=lm(Gluten ~axis2.fun + watercontent + L.Phenylalanine + 
+                      ph + X197+Variety, data=data.gluten.1 )
+
+model.gluten.var=lm(Gluten ~ watercontent + Harvard + ph + X197, data = data.gluten.1)
+
+summary(model.gluten.var)
+
+
+data.gluten$GlutenPred=predict(gluten.without.variety)
+plot(GlutenPred ~ Gluten, data=data.gluten,pch = 16, xlab="Observed gluten content (%)", ylab="Predicted gluten content (%)")+abline(0,1, col="blue", lwd=2 )
+
+Gluten=ggplot(data=data.gluten, aes(x=Gluten, y=GlutenPred, stroke=1.0,color=Region)) + 
+  geom_point() +  
+  theme_classic() + 
+  geom_smooth(method=lm, color="darkred", fill="blue",se=FALSE, fullrange=TRUE)+
+  xlab("Observed gluten content (%)")+
+  ylab("Predicted gluten content (%)")+
+  ggtitle("B.")+
+  theme(panel.border = element_rect(colour = "black", fill=NA))
+
+# Use brewer color palettes
+Gluten+scale_color_brewer(palette="Dark2")
+Gluten + theme(plot.title = element_text(size=3,hjust = 0.01))
+
+
+ggsave(file="grain gluten prediction.3.without.VAR.tiff", Gluten, height = 3.5, width =5.5, units = "in",dpi=600, compression="lzw")
+ggsave(file="grain gluten prediction.3.VAR.individual.tiff", Gluten, height = 3.5, width =5.5, units = "in",dpi=600,compression="lzw")
+ggsave(file="grain gluten prediction.microsoil.eps", Gluten, height = 3.5, width =5.5, units = "in",dpi=700)
+
+
+model.gluten3$fitted.values
+
+#Residual error to check the non-linear relationship
+library(car)
+library(MASS)
+
+residualPlot(yield.without.variety, type = "rstandard")
+
+ceresPlots(model.gluten.combined)
+
+
+
+#selecting direction = "both" for mixed selection 
+step.lm.fit <- MASS::stepAIC(PMT.without.variety, direction = "both", 
+                             trace = FALSE)
+step.lm.fit$anova
+write.table(step.lm.fit$anova, file="aic.pmt.txt", sep="\t")
+
+
+#Are there any multi-collinear features?
+
+vif(yield.without.variety) %>%    
+  knitr::kable()
+
+vif=vif(PMT.without.variety)
+write.table(vif, file="VIF.PMT.txt", sep="\t")
+
+#Anova
+anova(step.lm.fit, test = "F")
+
+# non-constant error variance test 
+ncvTest(PMT.without.variety)
+
+# Test for Autocorrelated Errors 
+durbinWatsonTest(model.gluten.combined, max.lag = 5, reps=1000)
+
+lm.fit <- lm(formula = Gluten~., data = data.gluten) 
+
+#Check the fitness of the model
+confint(model.gluten.combined) %>%   
+  tidy() %>%   
+  tibble::add_column(coefficients = model.gluten.combined$coefficients,
+                     .after = 2) %>%   
+  knitr::kable()
+
+par(mfrow=c(2,2)) # init 4 charts in 1 panel
+plot(model.BEM.combined)
+
+```
+
+```{r}
+# Predictive model for PMT
+
+data.PMT=reg.data.cor[!is.na(reg.data.cor$PMT),]
+data.PMT=na.omit(data.PMT)
+data.PMT.1=reg.data.cca[!is.na(reg.data.cca$PMT),]
+data.PMT.1=na.omit(data.PMT.1)
+#data.PMT=data.PMT[-c(12,28),]
+#Cube root transformation
+#data.PMT= sign(data.PMT) * abs(data.PMT)^(1/3)
+
+#Stepwise regression
+model.null = lm(PMT ~ 1, data=data.PMT)
+model.full = lm(PMT ~ Total.C+Total.N+C.N.ratio+watercontent+ph+F.B.ratio+AOA+AOB+nirk+nosZ+
+                  L.Asparagine+L.Phenylalanine+A.Keto.Butyric.acid+bact.chao1+bact.simpson+bact.shannon+bact.sobs+fun.Chao1+fun.simpson+fun.shannon+fun.sobs+
+                  X1397+X2029+X2190+X2413+X3294+X3955+X4604+X6319++X30972+X80+X136+X886+X340+X454+X757+X1199+X1412+X1395+X3671+axis1.bact+axis2.bact+axis1.fun+axis2.fun, data=data.PMT)
+
+model.full1 = lm(  PMT ~ X3294 + ph + X757 + X1397 + AOA + axis1.bact + 
+                     X1412 + axis1.fun + axis2.fun + L.Arginine + X886 + watercontent + 
+                     X454 + X14 + axis2.bact + X80 + C.N.ratio + fun.shannon + 
+                     fun.Chao1 + L.Asparagine + X6319 + nirk + L.Phenylalanine + 
+                     X340 + bact.simpson + X136 + bact.sobs + Total.C, 
+                   data = data.PMT)
+
+step(model.null, scope= list(upper=model.full), direction="both",K=5,data=data.PMT)  
+
+step(model.null, scope = list(upper=model.full1), direction="both",K=5,data=data.PMT)  
+
+
+model.PMT.microbes=lm(PMT ~ A.Keto.Butyric.acid + L.Threonine + AOB + X2029 + F.B.ratio + axis1.bact + X340 + X757 +L.Arginine +  X1395 , data = data.PMT)
+
+
+PMT.microbes5=lm(PMT ~ axis1.bact + A.Keto.Butyric.acid + L.Threonine + 
+                   AOB + X2029 , data = data.PMT)
+
+
+model.PMT.combined=lm(PMT ~ Walton  + AOB + X14 + X6319 + Scotia  
+                      + fun.simpson + L.Threonine  + 
+                        + axis2.bact  + fun.sobs + 
+                        X1395 
+                      , data = data.PMT)
+
+
+
+PMT.without.variety=lm( PMT ~ X3294 + ph + X757 + X1397 + AOA + axis1.bact + 
+                          X1412 + axis1.fun + axis2.fun + watercontent+ L.Arginine , data=data.PMT)
+
+PMT.var=lm(PMT~Helios+Warthog+Walton+Scotia+Harvard+Touran, data.PMT)
+
+micro.soi.pmt=lm(PMT~Total.C+Total.N+C.N.ratio+watercontent+ph+X3294  + X757 + X1397 + AOA +X1412 ,data=data.PMT)
+
+
+summary(model.PMT.combined)
+summary(PMT.without.variety)
+summary(PMT.var)
+summary(micro.soi.pmt)
+summary(PMT.microbes5)
+
+#CCA based selection 
+model.null = lm(PMT ~ 1, data=data.PMT.1)
+model.full = lm(PMT ~ Total.C+Total.N+C.N.ratio+watercontent+ph+F.B.ratio+AOA+AOB+nirk+nosZ+D.Glucosaminic.Acid+Glucose.1..Phosphate+
+                  L.Arginine+L.Asparagine+L.Phenylalanine+N.Acetyl.D.Glucosamine+L.Threonine+A.Keto.Butyric.acid+Putrescine+bact.chao1+bact.simpson+bact.shannon+bact.sobs+fun.Chao1+fun.simpson+fun.shannon+fun.sobs+
+                  X33+X43+X47+X75+X98+X106+X162+X202+X258++X473+X83+X134+X126+X175+X197+X230+X697+X45+X131+X59+axis1.bact+axis2.bact+axis1.fun+axis2.fun+, data=data.PMT.1)
+
+step(model.null, scope = list(upper=model.full),direction="both",k=1, data=data.PMT.1) 
+
+
+
+model.PMT.new=lm( PMT ~ L.Phenylalanine + X47 + L.Arginine + N.Acetyl.D.Glucosamine + 
+                    AOB + X131 + X98 + X175   , data = data.PMT.1)
+
+
+
+summary(model.PMT.new)
+```
+
+```{r}
+#Plotting with predictable variables
+
+data.PMT$PMTPred=predict(PMT.without.variety)
+plot(PMTPred ~ PMT, data=data.PMT,pch = 16, xlab="Observed falling number (sec)", ylab="Predicted falling number (sec)")+abline(0,1, col="blue", lwd=2 )
+
+library(ggplot2)
+
+PMT=ggplot(data=data.PMT, aes(x=PMT, y=PMTPred, stroke=1.0,color=Region)) + 
+  geom_point() +  
+  theme_classic() +
+  xlab("Observed Peak Maximum Time(sec)")+
+  ylab("Predicted Peak Maximum Time (sec)")+
+  ggtitle("C. ")+
+  geom_smooth(method=lm, color="darkred", fill="blue",se=FALSE, fullrange=TRUE)+
+  theme(panel.border = element_rect(colour = "black", fill=NA))
+
+# Use brewer color palettes
+PMT+scale_color_brewer(palette="Dark2")
+PMT + theme(plot.title = element_text(size=6,hjust = 0.01))
+
+
+ggsave(file="grain PMT prediction.without.3.VAR.tiff", PMT, height = 3.5, width = 5.5, units = "in",dpi=600, compression="lzw")
+ggsave(file="grain PMT prediction.3.VAR.individual.tiff", PMT, height = 3.5, width = 5.5, units = "in",dpi=600,compression="lzw")
+ggsave(file="grain PMT prediction.microsoil.eps", PMT, height = 3.5, width = 5.5, units = "in",dpi=700)
+
+
+```
+
+```{r}
+library(MASS)
+
+# BEM vs n-related gene+ bacterial diversity
+
+data.BEM=reg.data.cor[!is.na(reg.data.cor$BEM),]
+data.BEM=na.omit(data.BEM)
+
+data.BEM.1=reg.data.cca[!is.na(reg.data.cca$BEM),]
+data.BEM.1=na.omit(data.BEM.1)
+#data.BEM=data.BEM[-c(3,28),]
+
+model.null = lm(BEM ~ 1, data=data.BEM)
+model.full = lm(BEM ~Total.C+Total.N+C.N.ratio+watercontent+ph+F.B.ratio+AOA+AOB+nirk+nosZ+D.Glucosaminic.Acid+
+                  L.Asparagine+L.Phenylalanine+N.Acetyl.D.Glucosamine+L.Threonine+A.Keto.Butyric.acid+Putrescine+bact.chao1+bact.simpson+bact.shannon+bact.sobs+fun.Chao1+fun.simpson+fun.shannon+fun.sobs+
+                  X14+X1397+X2029+X2190+X2413+X3294+X3955+X4604+X6319++X30972+X80+X136+X886+X340+X454+X757+X1199+X1412+X1395+X3671+axis1.bact+axis1.fun,data=data.BEM)
+
+step(model.null, scope = list(upper=model.full), direction="both",K=4,data=data.BEM)  
+
+#Double selection
+
+model.full1=lm(BEM ~ Harvard + ph + watercontent + Glucose.1..Phosphate + 
+                 X1412 + axis1.fun + X3294 + Y.Amino.Butyric.acid + X80 + 
+                 X14 + X340 + F.B.ratio + axis1.bact + AOB + X1397 + AOA + 
+                 Putrescine + X30972 + Total.C + fun.Chao1 + X3671 + fun.simpson + 
+                 nosZ + bact.simpson + X136 + L.Asparagine + A.Keto.Butyric.acid + 
+                 Total.N, data = data.BEM)
+
+step(model.null, scope = list(upper=model.full1), direction="both",data=data.BEM)  
+
+
+
+model.BEM.microbes=lm(BEM ~ X3294 + X6319 + Y.Amino.Butyric.Acid + fun.shannon + 
+                        Glucose.1..Phosphate + AOB + fun.sobs + X14 + X757 + axis2.bact + 
+                        L.Arginine + bact.chao1 + X3671 + bact.sobs + axis1.fun, data = data.BEM )
+
+BEM.microbes5=lm(BEM ~X6319+ Glucose.1..Phosphate + 
+                   AOB + X757  +fun.sobs 
+                 , data = data.BEM)
+
+
+model.BEM.combined=lm(BEM ~ Harvard + ph + watercontent + Glucose.1..Phosphate + 
+                        Putrescine + X3294 + X80 , data = data.BEM)
+
+
+BEM.without.variety=lm(BEM ~ ph + X3294 + watercontent + X14 + C.N.ratio + 
+                         axis1.fun + L.Threonine + X80 + D.Glucosaminic.Acid + F.B.ratio 
+                       , data = data.BEM)
+
+BEM.var=lm(BEM~Helios+Warthog+Walton+Scotia+Harvard,data=data.BEM)
+
+
+micro.soil.BEM=lm(BEM~Total.C+Total.N+C.N.ratio+watercontent+ph+X3294 + X14 + 
+                    axis1.fun + L.Threonine + X80 , data=data.BEM)
+
+summary(model.BEM.combined)
+summary(BEM.without.variety)
+summary(BEM.var)
+summary(micro.soil.BEM)
+summary(BEM.microbes5)
+#cca based selection
+model.null = lm(BEM ~ 1, data=data.BEM.1)
+model.full = lm(BEM ~ Total.C+Total.N+C.N.ratio+watercontent+ph+F.B.ratio+AOA+AOB+nirk+nosZ+Y.Amino.Butyric.acid+D.Glucosaminic.Acid+Glucose.1..Phosphate+
+                  L.Arginine+L.Asparagine+L.Phenylalanine+N.Acetyl.D.Glucosamine+L.Threonine+A.Keto.Butyric.acid+bact.chao1+bact.simpson+bact.shannon+bact.sobs+fun.Chao1+fun.simpson+fun.shannon+fun.sobs+
+                  X33+X43+X47+X75+X98+X106+X162+X202+X258++X473+X83+X134+X126+X175+X197+X230+X697+X45+X131+X59+axis1.bact+axis2.bact+axis1.fun+axis2.fun+Helios+Touran+Scotia+Walton+Warthog+Harvard, data=data.BEM.1)
+
+step(model.null, scope = list(upper=model.full), direction="both",k=3,trace = 0,data=data.BEM.1)
+
+model.full.1=lm(BEM ~ axis2.fun + L.Phenylalanine + Glucose.1..Phosphate + 
+                  ph + X131 + L.Arginine + axis1.fun + bact.chao1 + watercontent + F.B.ratio + X59 + X202 + axis1.bact + AOB + bact.sobs + N.Acetyl.D.Glucosamine + X75 + AOA + bact.shannon + D.Glucosaminic.Acid + A.Keto.Butyric.acid + C.N.ratio + L.Asparagine + fun.shannon + X43 + nosZ + bact.simpson + 
+                  Total.C, data = data.BEM.1)
+
+
+
+model.BEM.new=lm(BEM ~ axis2.fun + Helios + Scotia + Touran + X59, 
+                 data = data.BEM.1)
+
+summary(model.BEM.new)
+
+#Plotting with predicted variable
+
+
+data.BEM$BEMPred=predict(BEM.without.variety)
+plot(BEMPred ~ BEM, data=data.BEM,pch = 16, xlab="Observed BEM (BU)", ylab="Predicted BEM (BU)")+abline(0,1, col="blue", lwd=2 )
+
+
+BEM=ggplot(data=data.BEM, aes(x=BEM, y=BEMPred, stroke=1.0,color=Region)) + 
+  geom_point() +  
+  theme_classic() +
+  xlab("Observed Maximum Torque (BU)")+
+  ylab("Predicted Maximum Torque (BU)")+
+  ggtitle("D.")+
+  geom_smooth(method=lm, color="darkred", fill="blue",se=FALSE, fullrange=TRUE)+
+  theme(panel.border = element_rect(colour = "black", fill=NA))
+
+# Use brewer color palettes
+BEM+scale_color_brewer(palette="Dark2")
+BEM + theme(plot.title = element_text(size=7,hjust = 0.01))
+
+ggsave(file="grain BEM prediction.without.3.VAR.tiff", BEM, height = 3.5, width = 5.5, units = "in",dpi=600, compression="lzw")
+ggsave(file="grain BEM prediction.3.VAR.individual.tiff", BEM, height = 3.5, width = 5.5, units = "in",dpi=600,compression="lzw")
+ggsave(file="grain BEM prediction.microsoil.eps", BEM, height = 3.5, width = 5.5, units = "in",dpi=700)
+
+```
+
+```{r}
+
+# Variation partioninng
+library(vegan)
+
+variation.reg.cor = reg.data.cor[,-which(names(reg.data.cor) %in% c("Farm","Center","Variety","Region", "Centre.Region", "Protein.r","Gluten.r","PMT.r"))]
+variation.reg.cor.1 = variation.reg.cor[,which(names(variation.reg.cor) %in% c("ph" ,"BEM", "X3294" , "watercontent", "X14","C.N.ratio", "axis1.fun" ,"L.Threonine", "X80" , "D.Glucosaminic.Acid" , "F.B.ratio","Warthog","Walton","Harvard"))]
+
+variation.reg.cor.1=decostand(variation.reg.cor.1,"standardize")
+
+
+rda.MLR.BEM=rda(variation.reg.cor.1$BEM~ Walton+Warthog+Harvard+Helios+Scotia , data=variation.reg.cor.1 )
+
+
+
+anova(rda.MLR.BEM)
+anova.cca(rda.MLR.BEM)
+summary (rda.MLR.BEM)
+
+
+rda.$CCA$eig[rda.16S$CA$eig >mean(rda.16S$CA$eig) ]*100
+RsquareAdj(rda.MLR.BEM)
+
+
+rda.BEM =plot(rda.MLR.BEM, scaling =0, main=" RDA triplot with abundant 16S ASVs vs grain quality")
+asvs.scr=scores(rda.MLR.BEM, choices = 1:2, scaling = 1, display = "sp",)
+biplot=scores(asvs.scr, choices = 1:2, scaling = 1, display = "sites")
+arrows(0,0, asvs.scr[,1],asvs.scr[,2], length=0.1,lty = 1,col="dark grey")
+text(asvs.scr,cex = 0.8, col = "black")
+
+
+physico.soil=read.table(file=paste("physico.soil.txt", sep=""), header=T, sep="\t")
+
+reg.data.2=cbind(treat.reg,quality.33.field,physico.soil)
+
+
+#Weight vs n-related gene+bacterial diversity
+data.weight=reg.data.2[!is.na(reg.data.2$Yield),]
+data.weight=na.omit(data.weight)
+#Model with all variables
+model.null = lm(Yield ~ 1, data=data.weight)
+model.full = lm(Yield ~Total.N+Total.C+ C.N.ratio+watercontent, data=data.weight)
+
+
+step(model.null, scope = list(upper=model.full), direction="both",data=data.weight)  
+
+model.weight=lm(Yield ~Total.N+Total.C+C.N.ratio+watercontent+ph,data = data.weight)
+
+summary(model.weight)
+
+data.weight$WeightPred=predict(model.weight)
+plot(WeightPred ~ Weight, data=data.weight, pch = 16, xlab="Observed weight (kg/hL)", ylab="Predicted Weight (kg/hL)")+abline(0,1, col="blue", lwd=2)
+
+Grain.weight=ggplot(data=data.weight, aes(x=Weight, y=WeightPred)) +
+  xlab("Observed weight (kg/hL)")+
+  ylab("Predicted Weight (kg/hL)")+
+  ggtitle("Prediction of grain weight with soil properties
+                       R-square:0.36 ")+
+  geom_point(shape=16, color="black") + 
+  geom_smooth(method=lm, color="darkred", fill="blue",se=FALSE, fullrange=TRUE)+
+  theme_classic()
+# Use brewer color palettes
+Grain.weight+scale_color_brewer(palette="Dark2")
+
+
+
+ggsave(file="grain weight prediction.physico.tiff", Grain.weight, height = 3.5, width = 4.5, units = "in",dpi=600, compression="lzw")
+
+
+
+# Protein
+data.protein=reg.data.2[!is.na(reg.data.2$Protein),]
+
+#Model with all variables
+model.null = lm(Protein ~ 1, data=data.protein)
+model.full = lm(Protein ~Total.N+Total.C+C.N.ratio+watercontent+ph, data=data.protein)
+
+
+step(model.null, scope = list(upper=model.full),direction="both",data=data.protein)  
+
+
+model.protein=lm(Protein ~ Total.N+Total.C+C.N.ratio+watercontent+ph, data = data.protein)
+
+
+summary(model.protein)
+
+data.protein$ProteinPred=predict(model.protein)
+plot(ProteinPred ~ Protein, data=data.protein,pch = 16, xlab="Observed protein content (%)", ylab="Predicted protein content (%)")+abline(0,1, col="blue", lwd=2 )
+
+
+protein=ggplot(data=data.protein, aes(x=Protein, y=ProteinPred, stroke=1.0,color=Region)) + 
+  geom_point() +  
+  theme_classic() + 
+  geom_smooth(method=lm, color="darkred", fill="blue",se=FALSE, fullrange=TRUE)+
+  xlab("Observed protein content (%)")+
+  ylab("Predicted protein content (%)")+
+  ggtitle("C.Model with soil properties
+           (R-Sqr:0.31)")+
+  theme(panel.border = element_rect(colour = "black", fill=NA))
+
+
+protein+scale_color_brewer(palette="Dark2")
+protein + theme(plot.title = element_text(size=7,hjust = 0.01))
+
+ggsave(file="grain protien prediction.physico.tiff", protein, height = 3.5, width = 4.5, units = "in",dpi=600, compression="lzw")
+
+
+
+#Glutent content
+
+# Gluten
+data.gluten=reg.data.2[!is.na(reg.data.2$Gluten),]
+
+#Model with all variables
+model.null = lm(Gluten ~ 1, data=data.protein)
+model.full = lm(Gluten ~Total.N+Total.C+C.N.ratio+watercontent+ph, data=data.gluten)
+
+
+step(model.null, scope = list(upper=model.full),direction="both",data=data.gluten)  
+
+
+model.gluten=lm(Gluten ~ Total.N+Total.C+C.N.ratio+watercontent+ph, data = data.gluten)
+
+
+summary(model.gluten)
+
+data.gluten$GlutenPred=predict(model.gluten)
+plot(GlutenPred ~ Gluten, data=data.gluten,pch = 16, xlab="Observed protein content (%)", ylab="Predicted protein content (%)")+abline(0,1, col="blue", lwd=2 )
+
+gluten=ggplot(data=data.gluten, aes(x=Gluten, y=GlutenPred, stroke=1.0,color=Region)) + 
+  geom_point() +  
+  theme_classic() + 
+  geom_smooth(method=lm, color="darkred", fill="blue",se=FALSE, fullrange=TRUE)+
+  xlab("Observed gluten content (%)")+
+  ylab("Predicted gluten content (%)")+
+  ggtitle("D.Model with soil properties
+            (R-Sqr:0.33)")+
+  theme(panel.border = element_rect(colour = "black", fill=NA))
+
+# Use brewer color palettes
+gluten+scale_color_brewer(palette="Dark2")
+gluten + theme(plot.title = element_text(size=10,hjust = 0.01))
+
+
+ggsave(file="grain gluten prediction.physico.tiff", gluten, height = 3.5, width = 4.5, units = "in",dpi=600, compression="lzw")
+
+
+#PMT
+
+data.PMT=reg.data.2[!is.na(reg.data.2$PMT),]
+data.PMT=na.omit(data.PMT)
+#data.PMT=data.PMT[-c(12,28),]
+#Cube root transformation
+#data.PMT= sign(data.PMT) * abs(data.PMT)^(1/3)
+
+#Stepwise regression
+model.null = lm(PMT ~ 1, data=data.PMT)
+model.full = lm(PMT ~ Total.N+Total.C+C.N.ratio+watercontent+ph, data=data.PMT)
+
+step(model.null, scope = list(upper=model.full), direction="both",   data=data.PMT)  
+model.PMT=lm(PMT ~ Total.N+Total.C+C.N.ratio+watercontent+ph, data = data.PMT)
+
+
+summary(model.PMT)
+data.PMT$PMTPred=predict(model.PMT)
+PMT=ggplot(data=data.PMT, aes(x=PMT, y=PMTPred)) + 
+  xlab("Observed Peak Maximum Time(sec)")+
+  ylab("Predicted Peak Maximum Time (sec)")+
+  ggtitle("Prediction of PMT with soil properties
+              R-square:-0.06 ")+
+  geom_point(shape=16, color="black") + 
+  geom_smooth(method=lm, color="darkred", fill="blue",se=FALSE, fullrange=TRUE)+
+  theme_classic()
+# Use brewer color palettes
+PMT+scale_color_brewer(palette="Dark2")
+PMT+ theme(plot.title = element_text(size=10,hjust = 0.5))
+
+
+ggsave(file="grain PMT prediction.PHYSICO.tiff", PMT, height = 3.5, width = 4.5, units = "in",dpi=600, compression="lzw")
+
+
+#BEM
+
+data.BEM=reg.data.2[!is.na(reg.data.2$BEM),]
+
+
+model.null = lm(BEM ~ 1, data=data.BEM)
+model.full = lm(BEM ~ Total.N+Total.C+C.N.ratio+watercontent+ph, data=data.BEM)
+
+step(model.null, scope = list(upper=model.full), direction="both", trace = 0,  data=data.BEM)  
+model.BEM=lm(BEM ~ Total.N+Total.C+C.N.ratio+watercontent+ph, data = data.BEM)
+
+
+summary(model.BEM)
+data.BEM$BEMPred=predict(model.BEM)
+plot(BEMPred ~ BEM, data=data.BEM,pch = 16, xlab="Observed BEM (BU)", ylab="Predicted BEM (BU)")+abline(0,1, col="blue", lwd=2 )
+
+BEM=ggplot(data=data.BEM, aes(x=BEM, y=BEMPred)) + 
+  xlab("Observed BEM (BU)")+
+  ylab("Predicted BEM (BU)")+
+  ggtitle("Prediction of BEM with soil properties
+                  R-square: 0.06 ")+
+  geom_point(shape=16, color="black") + 
+  geom_smooth(method=lm, color="darkred", fill="blue",se=FALSE, fullrange=TRUE)+
+  theme_classic()
+# Use brewer color palettes
+BEM+scale_color_brewer(palette="Dark2")
+BEM+ theme(plot.title = element_text(size=10,hjust = 0.5))
+
+
+
+ggsave(file="grain BEM prediction.PHYSICO.tiff", BEM, height = 3.5, width = 4.5, units = "in",dpi=600, compression="lzw")
+
+
+#Residual error to check the non-linear relationship
+library(car)
+library(MASS)
+
+residualPlot(model.protein, type = "rstandard")
+
+ceresPlots(model.weight)
+
+#selecting direction = "both" for mixed selection 
+step.lm.fit <- MASS::stepAIC(model.weight, direction = "forward", 
+                             trace = FALSE)
+step.lm.fit$anova
+write.table(step.lm.fit$anova, file="AIC.bem.micro.txt", sep="\t")
+
+
+#Are there any multi-collinear features?
+
+vif(model.BEM) %>%    
+  knitr::kable()
+
+vif=vif(BEM.microbes5)
+write.table(vif, file="VIF.BEM.micro.txt", sep="\t")
+
+#Anova
+anova(step.lm.fit, test = "F")
+
+# non-constant error variance test 
+ncvTest(PMT.without.variety)
+
+# Test for Autocorrelated Errors 
+durbinWatsonTest(model.gluten.combined, max.lag = 5, reps=1000)
+
+lm.fit <- lm(formula = Gluten~., data = data.gluten) 
+
+#Check the fitness of the model
+confint(model.weight) %>%   
+  tidy() %>%   
+  tibble::add_column(coefficients = model.weight$coefficients,
+                     .after = 2) %>%   
+  knitr::kable()
+
+par(mfrow=c(2,2)) # init 4 charts in 1 panel
+plot(model.weight)
+
+
+# Correlation matrix between Biolog and grain quality
+library(ggcorrplot)
+reg.data.farm=read.table("regression data.txt", header=T, row.names = 1, sep="\t")
+quality.33.field=read.table("qual.trunc.txt", header=T, row.names = 1,  sep="\t")
+
+Biolog.32.farm=reg.data.farm[,which(names(reg.data.farm) %in% c("Y.Amino.Butyric.acid","D.Glucosaminic.Acid","Glucose.1..Phosphate",
+                                                                "L.Arginine","L.Asparagine","N.Acetyl.D.Glucosamine","L.Threonine","A.Keto.Butyric.acid","Putrescine"))]
+
+corr.biolog= cor(Biolog.32.farm,quality.33.field,use = "pairwise.complete.obs")
+
+
+Cor.bio=ggcorrplot(corr.biolog,  method = "square" )+
+scale_x_discrete(labels = c("Y-Amino Butyric acid","D-Glucosaminic.Acid","Glucose-1 Phosphate",
+                              "L-Arginine","L-Asparagine","N-Acetyl-D-Glucosamine","L-Threonine","A-Keto Butyric acid","Putrescine"))
+
+Cor.bio
+
+ggsave("circle_corr_biolog_farm.eps",Cor.bio, units="cm", width=30, height=20, dpi=600)
 
 ```{r pressure, echo=FALSE}
 plot(pressure)
