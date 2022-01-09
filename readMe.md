@@ -1,3 +1,3 @@
 # Supervised ML
 
-Bootstrapping!
+Regression based Model
