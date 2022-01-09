@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Multivariate MLR model"
 author: "Numan"
 date: "09/01/2022"
 output: html_document
@@ -689,7 +689,9 @@ data.weight=na.omit(data.weight)
 #Model with all variables
 model.null = lm(Yield ~ 1, data=data.weight)
 model.full = lm(Yield ~Total.N+Total.C+ C.N.ratio+watercontent, data=data.weight)
+```
 
+```{r}
 
 step(model.null, scope = list(upper=model.full), direction="both",data=data.weight)  
 
@@ -715,7 +717,9 @@ Grain.weight+scale_color_brewer(palette="Dark2")
 
 ggsave(file="grain weight prediction.physico.tiff", Grain.weight, height = 3.5, width = 4.5, units = "in",dpi=600, compression="lzw")
 
+```
 
+```{r}
 
 # Protein
 data.protein=reg.data.2[!is.na(reg.data.2$Protein),]
@@ -753,7 +757,9 @@ protein + theme(plot.title = element_text(size=7,hjust = 0.01))
 
 ggsave(file="grain protien prediction.physico.tiff", protein, height = 3.5, width = 4.5, units = "in",dpi=600, compression="lzw")
 
+```
 
+```{r}
 
 #Glutent content
 
@@ -795,14 +801,14 @@ ggsave(file="grain gluten prediction.physico.tiff", gluten, height = 3.5, width 
 
 
 #PMT
-
 data.PMT=reg.data.2[!is.na(reg.data.2$PMT),]
 data.PMT=na.omit(data.PMT)
 #data.PMT=data.PMT[-c(12,28),]
 #Cube root transformation
 #data.PMT= sign(data.PMT) * abs(data.PMT)^(1/3)
 
-#Stepwise regression
+#Step wise regression
+
 model.null = lm(PMT ~ 1, data=data.PMT)
 model.full = lm(PMT ~ Total.N+Total.C+C.N.ratio+watercontent+ph, data=data.PMT)
 
@@ -827,7 +833,9 @@ PMT+ theme(plot.title = element_text(size=10,hjust = 0.5))
 
 ggsave(file="grain PMT prediction.PHYSICO.tiff", PMT, height = 3.5, width = 4.5, units = "in",dpi=600, compression="lzw")
 
+```
 
+```{r}
 #BEM
 
 data.BEM=reg.data.2[!is.na(reg.data.2$BEM),]
@@ -925,8 +933,6 @@ Cor.bio
 
 ggsave("circle_corr_biolog_farm.eps",Cor.bio, units="cm", width=30, height=20, dpi=600)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
